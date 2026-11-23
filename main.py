@@ -1,10 +1,7 @@
-#!/usr/bin/env python3
-"""Entry program for the make.fun news-image-20261123 bounty.
+"""Entry point for the 23 November 2026 news image.
 
-Copies the pre-drawn front page, entry.png (drawn by draw_image.py from
-the verified news of Monday 23 November 2026), to the output path the
-grader reads. Standard library only, no network, no randomness: every run
-writes the exact same bytes.
+Copies the pre-drawn entry.png (made by draw_image.py) into the output
+directory. Standard library only: no drawing happens at grade time.
 """
 
 import os
@@ -12,17 +9,16 @@ import shutil
 import sys
 
 
-def main() -> int:
+def main():
     here = os.path.dirname(os.path.abspath(__file__))
     source = os.path.join(here, "entry.png")
-
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
-    destination = os.path.join(out_dir, "entry.png")
-
-    os.makedirs(out_dir, exist_ok=True)
-    shutil.copyfile(source, destination)
-    return 0
+    target_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    os.makedirs(target_dir, exist_ok=True)
+    target = os.path.join(target_dir, "entry.png")
+    shutil.copyfile(source, target)
+    size = os.path.getsize(target)
+    print("copied", source, "->", target, "(%d bytes)" % size)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

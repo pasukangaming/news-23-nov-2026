@@ -1,245 +1,184 @@
-"""Draw the 23 November 2026 world-news image (1024x1024, deterministic).
+"""Draw the 23 November 2026 front page: a newspaper-style summary image.
 
-Layout is a newspaper front page: masthead with the date, one big lead
-story (Democrats clinch their biggest US House majority since 1992),
-four smaller panels (Libya, Indonesia, Ukraine, Strait of Hormuz) and a
-bottom strip with two more stories.
-Everything is drawn with PIL primitives; the output PNG is byte-stable.
+Runs locally with PIL only. The graded program (main.py) never draws; it
+just copies the PNG this script produces.
 """
 
+import os
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1024, 1024
-
-PAPER = (244, 239, 228)
-INK = (18, 18, 18)
+PAPER = (247, 242, 232)
+INK = (24, 22, 18)
 RED = (178, 34, 34)
-GOLD = (232, 184, 75)
-NAVY = (18, 59, 79)
-LIGHT = (215, 227, 232)
-GREY = (110, 110, 105)
+NAVY = (28, 52, 96)
+TEAL = (18, 110, 108)
+GOLD = (176, 128, 28)
+GREY = (105, 100, 92)
+RULE = (180, 172, 156)
 
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+FONT_DIR = "/usr/share/fonts/truetype/dejavu"
+SERIF = os.path.join(FONT_DIR, "DejaVuSerif.ttf")
+SERIF_BOLD = os.path.join(FONT_DIR, "DejaVuSerif-Bold.ttf")
+SANS = os.path.join(FONT_DIR, "DejaVuSans.ttf")
+SANS_BOLD = os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")
 
 
 def font(path, size):
     return ImageFont.truetype(path, size)
 
 
-def wrap(d, text, fnt, max_w):
+def wrap(draw, text, fnt, max_w):
     """Split text into lines that fit max_w pixels."""
-    words = text.split()
     lines, cur = [], ""
-    for w in words:
-        trial = (cur + " " + w).strip()
-        if d.textlength(trial, font=fnt) <= max_w:
+    for word in text.split():
+        trial = (cur + " " + word).strip()
+        if draw.textlength(trial, font=fnt) <= max_w:
             cur = trial
         else:
             if cur:
                 lines.append(cur)
-            cur = w
+            cur = word
     if cur:
         lines.append(cur)
     return lines
 
 
-def text_block(d, x, y, lines, fnt, fill, leading=1.18):
-    """Draw lines starting at (x, y); return y after the last line."""
-    lh = int(fnt.size * leading)
-    for line in lines:
-        d.text((x, y), line, font=fnt, fill=fill)
-        y += lh
+def para(draw, x, y, text, fnt, max_w, leading, color=INK):
+    """Draw wrapped paragraph, return y below it."""
+    for line in wrap(draw, text, fnt, max_w):
+        draw.text((x, y), line, font=fnt, fill=color)
+        y += leading
     return y
 
 
-def centered(d, cx, y, text, fnt, fill):
-    w = d.textlength(text, font=fnt)
-    d.text((cx - w / 2, y), text, font=fnt, fill=fill)
+def kicker(draw, x, y, label, color):
+    """Small coloured tag line above a story."""
+    fnt = font(SANS_BOLD, 17)
+    draw.text((x, y), label.upper(), font=fnt, fill=color)
+    return y + 30
 
 
-def draw_capitol(d, cx, cy, r):
-    """A stylised US Capitol dome in white and gold on the navy lead."""
-    # dome
-    d.ellipse([cx - 78, cy - 88, cx + 78, cy + 40], fill=(240, 240, 235))
-    d.rectangle([cx - 78, cy - 22, cx + 78, cy + 40], fill=(240, 240, 235))
-    # dome ribs
-    for dx in (-52, -26, 0, 26, 52):
-        d.line([cx + dx, cy - 82 + abs(dx) // 3, cx + dx, cy + 38],
-               fill=(200, 200, 190), width=2)
-    # lantern + flag
-    d.rectangle([cx - 10, cy - 112, cx + 10, cy - 84], fill=(240, 240, 235))
-    d.ellipse([cx - 14, cy - 120, cx + 14, cy - 104], fill=GOLD)
-    d.line([cx, cy - 120, cx, cy - 146], fill=GOLD, width=3)
-    d.polygon([(cx, cy - 146), (cx + 30, cy - 139), (cx, cy - 132)],
-              fill=(178, 34, 34))
-    # drum + columns
-    d.rectangle([cx - 92, cy + 40, cx + 92, cy + 52], fill=(220, 220, 210))
-    for i in range(7):
-        x0 = cx - 84 + i * 26
-        d.rectangle([x0, cy + 52, x0 + 12, cy + 96], fill=(240, 240, 235))
-    d.rectangle([cx - 96, cy + 96, cx + 96, cy + 106], fill=(220, 220, 210))
-    # stars: 258 seats as a scatter of gold dots below the dome
-    import math
-    for i in range(24):
-        ang = math.pi * (0.15 + 0.7 * (i % 8) / 7)
-        rr = 118 + (i // 8) * 12
-        sx = cx + rr * math.cos(ang) * 0.9
-        sy = cy + 128 + rr * math.sin(ang) * 0.28
-        d.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], fill=GOLD)
+def headline(draw, x, y, text, fnt, max_w, leading):
+    for line in wrap(draw, text, fnt, max_w):
+        draw.text((x, y), line, font=fnt, fill=INK)
+        y += leading
+    return y
 
 
-def panel(d, x, y, w, h, bg, kicker, headline, sub, art):
-    d.rectangle([x, y, x + w, y + h], fill=bg)
-    pad = 18
-    tx = x + pad
-    ty = y + 14
-    kf = font(FONT_BOLD, 19)
-    sf = font(FONT_REG, 20)
-    art_w = 108
-    text_w = w - pad * 2 - art_w
-    d.text((tx, ty), kicker, font=kf, fill=GOLD)
-    ty += 28
-    # shrink the headline until it fits on two lines
-    size = 33
-    while size > 24:
-        hf = font(FONT_BOLD, size)
-        if len(wrap(d, headline, hf, text_w)) <= 2:
-            break
-        size -= 2
-    lines = wrap(d, headline, hf, text_w)
-    ty = text_block(d, tx, ty, lines, hf, (255, 255, 255), leading=1.08)
-    ty += 4
-    slines = wrap(d, sub, sf, text_w)[:2]
-    text_block(d, tx, ty, slines, sf, LIGHT, leading=1.15)
-    art(d, x + w - art_w - 8, y + 18, art_w, h - 36)
+def rule(draw, x0, y, x1, width=2, color=RULE):
+    draw.line([(x0, y), (x1, y)], fill=color, width=width)
 
 
-def art_ship(d, x, y, w, h):
-    # a warship listing in the harbour, smoke rising
-    d.rectangle([x, y + h - 26, x + w, y + h], fill=(38, 84, 96))
-    d.polygon([(x + 6, y + h - 34), (x + 98, y + h - 52),
-               (x + 98, y + h - 34)], fill=(90, 100, 110))
-    d.rectangle([x + 30, y + h - 66, x + 52, y + h - 48], fill=(120, 128, 136))
-    d.line([x + 40, y + h - 84, x + 40, y + h - 66], fill=(120, 128, 136), width=4)
-    for i, (sx, sy, sr) in enumerate([(x + 42, y + 22, 12), (x + 58, y + 8, 16),
-                                      (x + 74, y + 26, 10)]):
-        d.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=(120, 120, 115))
-    d.polygon([(x + 52, y + h - 60), (x + 58, y + h - 76), (x + 64, y + h - 60)],
-              fill=(255, 120, 40))
-    d.ellipse([x + 70, y + h - 46, x + 78, y + h - 38], fill=(255, 220, 120))
-
-
-def art_flame(d, x, y, w, h):
-    d.rectangle([x, y + h - 26, x + w, y + h], fill=(38, 84, 96))
-    for bx, bw, bh in [(x + 2, 22, 62), (x + 28, 18, 84), (x + 50, 24, 54),
-                        (x + 78, 20, 74)]:
-        d.rectangle([bx, y + h - 12 - bh, bx + bw, y + h - 12],
-                    fill=(70, 70, 70))
-    d.polygon([(x + 52, y + 6), (x + 66, y + 34), (x + 76, y + 22),
-               (x + 72, y + 52), (x + 52, y + 62), (x + 38, y + 44),
-               (x + 46, y + 28)], fill=(255, 120, 40))
-    d.polygon([(x + 54, y + 30), (x + 62, y + 42), (x + 66, y + 34),
-               (x + 62, y + 52), (x + 52, y + 54), (x + 50, y + 42)],
-              fill=(255, 220, 120))
-
-
-def art_skyline(d, x, y, w, h):
-    base = y + h - 12
-    for bx, bw, bh in [(x + 2, 22, 62), (x + 28, 18, 84), (x + 50, 24, 54),
-                        (x + 78, 20, 74)]:
-        d.rectangle([bx, base - bh, bx + bw, base], fill=(148, 163, 184))
-        for wy in range(base - bh + 8, base - 6, 14):
-            d.rectangle([bx + 4, wy, bx + bw - 4, wy + 6], fill=(255, 220, 120))
-    d.ellipse([x + 58, y + 2, x + 82, y + 26], fill=(203, 213, 225))
-    d.ellipse([x + 70, y - 6, x + 96, y + 18], fill=(226, 232, 240))
-    d.polygon([(x + 30, y + 34), (x + 38, y + 18), (x + 46, y + 34)],
-              fill=(255, 120, 40))
-
-
-def art_tanker(d, x, y, w, h):
-    d.rectangle([x, y + h - 26, x + w, y + h], fill=(38, 84, 96))
-    d.rectangle([x + 4, y + h - 44, x + 100, y + h - 28], fill=(120, 60, 40))
-    d.rectangle([x + 60, y + h - 62, x + 84, y + h - 44], fill=(200, 200, 195))
-    d.line([x + 72, y + h - 80, x + 72, y + h - 62], fill=(200, 200, 195), width=4)
-    for i, (sx, sy) in enumerate([(x + 12, y + 56), (x + 34, y + 44)]):
-        ex, ey = sx + 30, sy - 34
-        d.arc([sx - 8, ey - 8, ex + 22, sy + 18], start=200, end=330,
-              fill=(255, 170, 60), width=5)
-        d.ellipse([ex - 4, ey - 4, ex + 4, ey + 4], fill=(255, 220, 120))
-    d.text((x + 4, y + h - 22), "x2", font=font(FONT_BOLD, 18), fill=(255, 170, 60))
-
-
-def render(path):
+def draw_page():
     img = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(img)
+    mx = 44  # margin
+    right = W - mx
 
     # ---- masthead ----
-    centered(d, W // 2, 26, "THE WORLD IN ONE IMAGE",
-             font(FONT_BOLD, 58), INK)
-    d.rectangle([24, 104, W - 24, 108], fill=RED)
-    centered(d, W // 2, 120, "MONDAY, 23 NOVEMBER 2026",
-             font(FONT_BOLD, 30), RED)
+    d.text((mx, 26), "THE WORLD TODAY", font=font(SERIF_BOLD, 76), fill=INK)
+    d.text((mx, 112), "MONDAY, 23 NOVEMBER 2026  •  ONE DAY, SEVEN STORIES",
+           font=font(SANS_BOLD, 22), fill=RED)
+    rule(d, mx, 152, right, 4, INK)
+    rule(d, mx, 160, right, 1)
 
-    # ---- lead story: Democrats' House majority ----
-    d.rectangle([24, 168, W - 24, 500], fill=NAVY)
-    draw_capitol(d, 196, 300, 108)
-    tx = 348
-    d.text((tx, 196), "US MIDTERMS  •  WASHINGTON",
-           font=font(FONT_BOLD, 21), fill=GOLD)
-    d.text((tx, 226), "DEMOCRATS WIN", font=font(FONT_BOLD, 66),
-           fill=(255, 255, 255))
-    d.text((tx, 296), "258 SEATS", font=font(FONT_BOLD, 66),
-           fill=(255, 255, 255))
-    sub = ("Biggest House majority since 1992 — a sweep unseen "
-           "in three decades; the Senate flips blue too.")
-    lines = wrap(d, sub, font(FONT_REG, 25), W - 24 - tx - 28)
-    text_block(d, tx, 392, lines, font(FONT_REG, 25), LIGHT, leading=1.22)
+    # ---- lead story ----
+    y = 182
+    y = kicker(d, mx, y, "United States  •  Lead story", RED)
+    y = headline(d, mx, y,
+                 "Democrats clinch biggest House majority since 1992",
+                 font(SERIF_BOLD, 56), right - mx, 64)
+    y += 4
+    y = headline(d, mx, y,
+                 "258 seats, a gain of 44 — sealed Sunday as Chuck Hubbard "
+                 "beat Virginia Foxx in North Carolina; the Senate flips blue too.",
+                 font(SERIF, 28), right - mx, 36)
+    y += 10
+    # seat-count bar: 258 of 435
+    bar_y = y
+    d.rectangle([mx, bar_y, right, bar_y + 26], outline=INK, width=2)
+    fill_w = int((right - mx) * 258 / 435)
+    d.rectangle([mx + 2, bar_y + 2, mx + fill_w, bar_y + 24], fill=NAVY)
+    d.text((mx, bar_y + 34),
+           "Democrats 258  •  Republicans 177  •  218 needed for a majority",
+           font=font(SANS_BOLD, 20), fill=NAVY)
+    y = bar_y + 66
+    rule(d, mx, y, right, 2, INK)
 
-    # ---- four panels ----
-    pw, ph, gap = 476, 160, 12
-    panel(d, 24, 512, pw, ph, (122, 31, 31), "LIBYA  •  BENGHAZI",
-          "RUSSIAN WARSHIP HIT",
-          "Corvette Merkury struck by suspected sea drones.",
-          art_ship)
-    panel(d, 24 + pw + gap, 512, pw, ph, (20, 83, 45), "INDONESIA  •  CIKANDE",
-          "FACTORY FIRE: 24 BODY BAGS",
-          "Candy factory blaze; dozens missing, search resumes.",
-          art_flame)
-    panel(d, 24, 512 + ph + gap, pw, ph, (51, 65, 85), "UKRAINE  •  KYIV REGION",
-          "DRONE HITS KYIV BUILDING",
-          "At least 14 missing after Russian drone strike.",
-          art_skyline)
-    panel(d, 24 + pw + gap, 512 + ph + gap, pw, ph, (124, 45, 18),
-          "STRAIT OF HORMUZ",
-          "TWO TANKERS HIT",
-          "Projectiles strike tankers as the war spreads.",
-          art_tanker)
+    # ---- three-column story grid, two rows of three ----
+    y += 18
+    gap = 24
+    col_w = (right - mx - 2 * gap) // 3
 
-    # ---- bottom strip: two more stories ----
-    d.line([24, 858, W - 24, 858], fill=INK, width=2)
-    d.line([W // 2, 872, W // 2, 958], fill=(180, 175, 165), width=2)
-    bf = font(FONT_BOLD, 22)
-    kf = font(FONT_BOLD, 18)
-    sf = font(FONT_REG, 19)
-    d.text((24, 868), "CYBERCRIME", font=kf, fill=RED)
-    y = text_block(d, 24, 890, wrap(d, "FBI PROBES BREACH OF ITS DATABASE",
-                                    bf, 452), bf, INK, leading=1.08)
-    text_block(d, 24, y + 2, wrap(d, "Apparent hack of criminal records under inquiry.",
-                                  sf, 452), sf, (70, 70, 65))
-    d.text((W // 2 + 18, 868), "BALTIC SEA", font=kf, fill=RED)
-    y = text_block(d, W // 2 + 18, 890, wrap(d, "RUSSIAN SHIP STILL BURNING OFF FINLAND",
-                                             bf, 452), bf, INK, leading=1.08)
-    text_block(d, W // 2 + 18, y + 2, wrap(d, "Cargo ship ablaze after attack, drifting in the Gulf.",
-                                           sf, 452), sf, (70, 70, 65))
+    stories = [
+        ("Ukraine war  •  Black Sea", NAVY,
+         "Russian corvette hit off Libya",
+         "The corvette Merkury was struck by suspected Ukrainian sea "
+         "drones at Benghazi and is mostly sunk."),
+        ("Middle East  •  Gulf", TEAL,
+         "Two tankers hit in Strait of Hormuz",
+         "Two oil tankers were struck by projectiles in the strait that "
+         "carries a fifth of the world's seaborne oil."),
+        ("Indonesia  •  Cikande", RED,
+         "Candy-factory fire: 24 dead, dozens missing",
+         "Rescuers recovered 24 body bags from the gutted factory in "
+         "Cikande, Banten; the search resumes on Monday."),
+        ("Ukraine  •  Kyiv region", NAVY,
+         "Drone strike on homes, 14 missing",
+         "A Russian drone hit a building in the Kyiv region, leaving at "
+         "least 14 people missing in the rubble."),
+        ("United States", GOLD,
+         "FBI probes breach of its crime database",
+         "The FBI is investigating an apparent breach of its criminal "
+         "database, checking what was reached."),
+        ("Baltic  •  Finland", TEAL,
+         "Russian cargo ship still burning",
+         "A Russian cargo ship remains ablaze off the Finnish coast, "
+         "with coastguard vessels standing by."),
+    ]
+
+    def draw_cell(x, yy, tag, colour, head, body):
+        yy = kicker(d, x, yy, tag, colour)
+        yy = headline(d, x, yy, head, font(SERIF_BOLD, 26), col_w, 32)
+        yy += 4
+        yy = para(d, x, yy, body, font(SERIF, 18), col_w, 24)
+        return yy
+
+    row_y = y
+    row_bottom = row_y
+    for i, (tag, colour, head, body) in enumerate(stories):
+        x = mx + (i % 3) * (col_w + gap)
+        if i == 3:
+            row_y = row_bottom + 18
+            rule(d, mx, row_y - 9, right, 1)
+        bottom = draw_cell(x, row_y, tag, colour, head, body)
+        if i % 3 == 0:
+            row_bottom = bottom
+        else:
+            row_bottom = max(row_bottom, bottom)
+    y = row_bottom
 
     # ---- footer ----
-    centered(d, W // 2, 994, "23 NOVEMBER 2026  —  THE WORLD'S NEWS IN ONE IMAGE",
-             font(FONT_BOLD, 17), GREY)
+    rule(d, mx, y + 8, right, 2, INK)
+    d.text((mx, y + 20),
+           "Compiled from wire reports  •  Monday 23 November 2026",
+           font=font(SANS, 19), fill=GREY)
+    brand = "THE WORLD TODAY"
+    brand_fnt = font(SANS_BOLD, 19)
+    d.text((right - d.textlength(brand, font=brand_fnt), y + 20),
+           brand, font=brand_fnt, fill=GREY)
 
-    img.save(path, format="PNG")
-    return path
+    return img
+
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    page = draw_page()
+    out = os.path.join(here, "entry.png")
+    page.save(out, "PNG")
+    print("wrote", out, page.size)
 
 
 if __name__ == "__main__":
-    render("entry.png")
+    main()
